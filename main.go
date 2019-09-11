@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/isword123/proto-go-struct-slimer/logic"
+	"github.com/isword123/proto-go-struct-slimmer/logic"
 )
 
 var (
