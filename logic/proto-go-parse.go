@@ -47,7 +47,7 @@ func (pp *ProtoGoParser)PrintStructs() {
 			fmt.Println("struct", tSpec.Name)
 
 			for _, field := range structExp.Fields.List {
-				fmt.Println(field.Names, field.Type, field.Tag)
+				fmt.Println("names", field.Names, "type", field.Type, "tag", field.Tag)
 			}
 
 			fmt.Println("------")
