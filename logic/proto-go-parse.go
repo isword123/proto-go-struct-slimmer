@@ -84,7 +84,7 @@ func (pp *ProtoGoParser)PrintStructs() {
 
 				if ident, ok := field.Type.(*ast.Ident); ok {
 					fmt.Println("names", field.Names, "type", ident.Name, "tag", field.Tag)
-					bufs.WriteString(fmt.Sprintf("\t%s %s\n", field.Names[0].Name, ident.Name))
+					bufs.WriteString(fmt.Sprintf("\t%s %s", field.Names[0].Name, ident.Name))
 				}
 
 				fmt.Println("filed type---", reflect.TypeOf(field.Type), "field name ---", field.Names[0].Name)
@@ -93,17 +93,27 @@ func (pp *ProtoGoParser)PrintStructs() {
 				if arrI, ok := field.Type.(*ast.ArrayType); ok {
 					if eleI, ok := arrI.Elt.(*ast.StarExpr); ok {
 						if detailI, ok := eleI.X.(*ast.Ident); ok {
-							bufs.WriteString(fmt.Sprintf("\t%s []*%s\n", field.Names[0].Name, detailI.Name))
+							bufs.WriteString(fmt.Sprintf("\t%s []*%s", field.Names[0].Name, detailI.Name))
 						} else {
 							fmt.Println("wrong identifier type", field.Names[0].Name, reflect.TypeOf(eleI.X))
 						}
 					} else if eleI, ok := arrI.Elt.(*ast.Ident); ok {
-						bufs.WriteString(fmt.Sprintf("\t%s []%s\n", field.Names[0].Name, eleI.Name))
+						bufs.WriteString(fmt.Sprintf("\t%s []%s", field.Names[0].Name, eleI.Name))
 					} else {
 						fmt.Println("wrong identifier type", field.Names[0].Name, reflect.TypeOf(arrI.Elt))
 						continue
 					}
 
+				}
+
+				if field.Tag != nil {
+					jsonTag, ok := pp.parseJSONTag(field.Tag.Value)
+					if ok {
+						bufs.WriteString(fmt.Sprintf("`%s`\n", jsonTag))
+					}
+					fmt.Println("tag is", field.Tag.Value)
+				} else {
+					bufs.WriteString("\n")
 				}
 			}
 
@@ -114,4 +124,14 @@ func (pp *ProtoGoParser)PrintStructs() {
 	}
 
 	fmt.Println("structs\n\n", bufs.String())
+}
+
+func (pp *ProtoGoParser) parseJSONTag(srcTag string) (string, bool) {
+	index := strings.Index(srcTag, "json:")
+
+	if index < 0 {
+		return "", false
+	}
+
+	return srcTag[index:len(srcTag) - 1], true
 }
