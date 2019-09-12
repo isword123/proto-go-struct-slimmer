@@ -8,17 +8,21 @@ import (
 
 var (
 	goFile = flag.String("f", "file path", "go file path")
+	dstDir = flag.String("d", "dst file dir", "")
 )
 
 func main() {
 	flag.Parse()
 
-	fmt.Println("Hello, proto-go-struct-slimmer")
-	parser := new(logic.ProtoGoParser)
-	ok := parser.Parse(*goFile)
-	if !ok {
+	if len(*goFile) == 0 || len(*dstDir) == 0 {
+		fmt.Println("No go file path specified", *goFile, *dstDir)
 		return
 	}
 
-	parser.PrintStructs()
+	parser := new(logic.ProtoGoParser)
+	ok := parser.ParseAndSave(*goFile, *dstDir)
+	if !ok {
+		fmt.Println("Parse and save failed")
+		return
+	}
 }
