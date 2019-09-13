@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	srcPkgName = "git.vpgame.cn/sh-team/das-ag-dota2-api-client/proto-gens"
+	srcPkgPath = "git.vpgame.cn/sh-team/das-ag-dota2-api-client/proto-gens"
+	srcPkgName = "das_dota2"
 )
 
 type ProtoGoParser struct {
@@ -47,7 +48,7 @@ func (pp *ProtoGoParser)Parse(filePath string) bool {
 	pp.buff = new(bytes.Buffer)
 
 	pp.buff.WriteString(fmt.Sprintf("package %s\n\n", pp.getPackageName()))
-	pp.buff.WriteString(fmt.Sprintf("import \"%s\"", srcPkgName))
+	pp.buff.WriteString(fmt.Sprintf("import \"%s\"", srcPkgPath))
 	pp.buff.WriteString("\n\n")
 
 	return true
@@ -257,4 +258,6 @@ func (pp *ProtoGoParser) getStruct(tSpec *ast.TypeSpec, structExp *ast.StructTyp
 	}
 
 	bufs.Write(obj.Export())
+
+	bufs.Write(obj.BuildTransMethod())
 }
