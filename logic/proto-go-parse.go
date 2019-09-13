@@ -18,6 +18,7 @@ type ProtoGoParser struct {
 	file *ast.File
 	packageName string
 	fileBaseName string
+	modName string
 }
 
 func (pp *ProtoGoParser)Parse(filePath string) bool {
@@ -35,21 +36,6 @@ func (pp *ProtoGoParser)Parse(filePath string) bool {
 	fmt.Println("file base name", filePath, pp.fileBaseName)
 
 	pp.packageName = parsedFile.Name.Name + "_trans"
-
-	return true
-}
-
-func (pp *ProtoGoParser)ParseDir(filePath string) bool {
-	fs := token.NewFileSet()
-	// parser.ParseDir()
-	parsedFile, err := parser.ParseFile(fs, filePath, nil, parser.ParseComments)
-
-	if err != nil {
-		log.Println("Parse proto go file failed", err)
-		return false
-	}
-
-	pp.file = parsedFile
 
 	return true
 }
@@ -78,8 +64,21 @@ func (pp *ProtoGoParser) GetStructsBytes() []byte {
 		}
 
 		for _, spec := range genDecl.Specs {
+
+			// 处理 const 字段
+			if vSpec, ok := spec.(*ast.ValueSpec); ok && genDecl.Tok == token.CONST {
+				pp.getConstDefs(vSpec, bufs)
+				continue
+			}
+
 			tSpec, ok := spec.(*ast.TypeSpec)
 			if !ok {
+				continue
+			}
+
+			// for type definitions
+			if it, ok := tSpec.Type.(*ast.Ident); ok {
+				pp.getConstTypeDefs(tSpec ,it, bufs)
 				continue
 			}
 
@@ -88,13 +87,10 @@ func (pp *ProtoGoParser) GetStructsBytes() []byte {
 				continue
 			}
 
-			fmt.Println("struct", tSpec.Name)
-
 			// 不是公开的数据结构，不处理
 			if !ast.IsExported(tSpec.Name.Name) {
 				continue
 			}
-
 
 			bufs.WriteString(fmt.Sprintf("type %s struct {\n", tSpec.Name))
 
@@ -177,6 +173,49 @@ func (pp *ProtoGoParser) saveNewCode(bs []byte, dir string) bool {
 	}
 
 	return true
+}
+
+func (pp *ProtoGoParser) getConstTypeDefs(ts *ast.TypeSpec,ident *ast.Ident, buff *bytes.Buffer) {
+	buff.WriteString(fmt.Sprintf("type %s %s \n\n", ts.Name, ident.Name))
+}
+
+func (pp *ProtoGoParser) getConstDefs(vs *ast.ValueSpec, buff *bytes.Buffer) {
+	typ := ""
+
+	if vs.Type == nil && len(vs.Values) > 0 {
+		ce, ok := vs.Values[0].(*ast.CallExpr)
+		if !ok {
+			return
+		}
+		id, ok := ce.Fun.(*ast.Ident)
+		if !ok {
+			return
+		}
+		typ = id.Name
+	} else if vs.Type != nil {
+		ident, ok := vs.Type.(*ast.Ident)
+		if !ok {
+			return
+		}
+
+		typ = ident.Name
+	}
+
+	if len(typ) == 0 {
+		return
+	}
+
+	if len(vs.Names) == 0 || len(vs.Values) == 0 {
+		return
+	}
+
+	name := vs.Names[0]
+	val, ok := vs.Values[0].(*ast.BasicLit)
+	if !ok {
+		return
+	}
+
+	buff.WriteString(fmt.Sprintf("const %s %s = %s\n\n", name.Name, typ, val.Value))
 }
 
 func (pp *ProtoGoParser) ParseAndSave(filePath string, dir string) bool {
