@@ -46,7 +46,7 @@ var (
 			"TeamLogo",
 		},
 		"TeamLaneAnalysis_PlayerInfo": {
-			"TeamLogo",
+			"PlayerLogo",
 		},
 		"GetFeMatchTextBroadcastReply_MatchTextBroadcast_AccountInfo": {
 			"Logo",
