@@ -1,7 +1,6 @@
 package models
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -63,7 +62,6 @@ var (
 
 
 func IsExcludeInDasAgDota2(structName string, fieldName string) bool {
-	fmt.Println("to check", structName, fieldName)
 	arr, ok := 	dasAgDota2Structs[structName]
 	if !ok {
 		return false

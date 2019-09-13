@@ -15,11 +15,17 @@ import (
 	"strings"
 )
 
+const (
+	srcPkgName = "git.vpgame.cn/sh-team/das-ag-dota2-api-client/proto-gens"
+)
+
 type ProtoGoParser struct {
 	file *ast.File
 	packageName string
 	fileBaseName string
 	modName string
+
+	buff *bytes.Buffer
 }
 
 func (pp *ProtoGoParser)Parse(filePath string) bool {
@@ -38,6 +44,12 @@ func (pp *ProtoGoParser)Parse(filePath string) bool {
 
 	pp.packageName = parsedFile.Name.Name + "_trans"
 
+	pp.buff = new(bytes.Buffer)
+
+	pp.buff.WriteString(fmt.Sprintf("package %s\n\n", pp.getPackageName()))
+	pp.buff.WriteString(fmt.Sprintf("import \"%s\"", srcPkgName))
+	pp.buff.WriteString("\n\n")
+
 	return true
 }
 
@@ -54,9 +66,7 @@ func (pp *ProtoGoParser) getFileBaseName() string {
 }
 
 func (pp *ProtoGoParser) GetStructsBytes() []byte {
-	bufs := new(bytes.Buffer)
-
-	bufs.WriteString(fmt.Sprintf("package %s\n\n", pp.getPackageName()))
+	bufs := pp.buff
 
 	for _, decl := range pp.file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
@@ -68,7 +78,7 @@ func (pp *ProtoGoParser) GetStructsBytes() []byte {
 
 			// 处理 const 字段
 			if vSpec, ok := spec.(*ast.ValueSpec); ok && genDecl.Tok == token.CONST {
-				pp.getConstDefs(vSpec, bufs)
+				pp.getConstDefs(vSpec)
 				continue
 			}
 
@@ -84,80 +94,9 @@ func (pp *ProtoGoParser) GetStructsBytes() []byte {
 			}
 
 			structExp, ok1 := tSpec.Type.(*ast.StructType)
-			if !ok1 {
-				continue
+			if ok1 {
+				pp.getStruct(tSpec, structExp)
 			}
-
-			// 不是公开的数据结构，不处理
-			if !ast.IsExported(tSpec.Name.Name) {
-				continue
-			}
-
-			structName := tSpec.Name.Name
-			bufs.WriteString(fmt.Sprintf("type %s struct {\n", structName))
-
-			for _, field := range structExp.Fields.List {
-				if len(field.Names) <= 0 {
-					continue
-				}
-
-				fieldSet := false
-				fieldName := field.Names[0].Name
-				if strings.HasPrefix(fieldName, "XXX_") {
-					continue
-				}
-
-				if ident, ok := field.Type.(*ast.Ident); ok {
-					if !models.IsExcludeInDasAgDota2(structName, fieldName) {
-						bufs.WriteString(fmt.Sprintf("\t%s %s", fieldName, ident.Name))
-						fieldSet = true
-					}
-				} else if arrI, ok := field.Type.(*ast.ArrayType); ok {
-					// *ast.ArrayType field name --- Titles
-					if eleI, ok := arrI.Elt.(*ast.StarExpr); ok {
-						if detailI, ok := eleI.X.(*ast.Ident); ok {
-							bufs.WriteString(fmt.Sprintf("\t%s []*%s", fieldName, detailI.Name))
-							fieldSet = true
-						} else {
-							fmt.Println("wrong identifier type", fieldName, reflect.TypeOf(eleI.X))
-						}
-					} else if eleI, ok := arrI.Elt.(*ast.Ident); ok {
-						bufs.WriteString(fmt.Sprintf("\t%s []%s", fieldName, eleI.Name))
-						fieldSet = true
-					} else {
-						fmt.Println("wrong identifier type", fieldName, reflect.TypeOf(arrI.Elt))
-						continue
-					}
-
-				} else if starI, ok := field.Type.(*ast.StarExpr); ok {
-					detailI, ok := starI.X.(*ast.Ident)
-					if ok {
-						if !models.IsExcludeInDasAgDota2(structName, fieldName) {
-							bufs.WriteString(fmt.Sprintf("\t%s *%s", fieldName, detailI.Name))
-							fieldSet = true
-						}
-					} else {
-						fmt.Println("Unknown star type", fieldName, starI.X)
-					}
-				} else {
-					fmt.Println("Unknown type", fieldName, field.Type)
-				}
-
-				if !fieldSet {
-					continue
-				}
-
-				if field.Tag != nil {
-					jsonTag, ok := pp.parseJSONTag(field.Tag.Value)
-					if ok {
-						bufs.WriteString(fmt.Sprintf(" `%s`\n", jsonTag))
-					}
-				} else {
-					bufs.WriteString("\n")
-				}
-			}
-
-			bufs.WriteString("}\n\n")
 		}
 	}
 
@@ -190,7 +129,7 @@ func (pp *ProtoGoParser) getConstTypeDefs(ts *ast.TypeSpec,ident *ast.Ident, buf
 	buff.WriteString(fmt.Sprintf("type %s %s \n\n", ts.Name, ident.Name))
 }
 
-func (pp *ProtoGoParser) getConstDefs(vs *ast.ValueSpec, buff *bytes.Buffer) {
+func (pp *ProtoGoParser) getConstDefs(vs *ast.ValueSpec) {
 	typ := ""
 
 	if vs.Type == nil && len(vs.Values) > 0 {
@@ -226,11 +165,96 @@ func (pp *ProtoGoParser) getConstDefs(vs *ast.ValueSpec, buff *bytes.Buffer) {
 		return
 	}
 
-	buff.WriteString(fmt.Sprintf("const %s %s = %s\n\n", name.Name, typ, val.Value))
+	pp.buff.WriteString(fmt.Sprintf("const %s %s = %s\n\n", name.Name, typ, val.Value))
 }
 
 func (pp *ProtoGoParser) ParseAndSave(filePath string, dir string) bool {
-	pp.Parse(filePath)
+	if !pp.Parse(filePath) {
+		return false
+	}
+
 	bs := pp.GetStructsBytes()
 	return pp.saveNewCode(bs, dir)
+}
+
+func (pp *ProtoGoParser) getStruct(tSpec *ast.TypeSpec, structExp *ast.StructType) {
+	// 不是公开的数据结构，不处理
+	if !ast.IsExported(tSpec.Name.Name) {
+		return
+	}
+
+	bufs := pp.buff
+
+	var obj Object
+	structName := tSpec.Name.Name
+	obj.Name = structName
+
+	for _, field := range structExp.Fields.List {
+		if len(field.Names) <= 0 {
+			continue
+		}
+
+		fieldSet := false
+		fieldName := field.Names[0].Name
+		if strings.HasPrefix(fieldName, "XXX_") {
+			continue
+		}
+
+		var sf Field
+		sf.Name = fieldName
+		if ident, ok := field.Type.(*ast.Ident); ok {
+			if !models.IsExcludeInDasAgDota2(structName, fieldName) {
+				sf.Type = ident.Name
+				fieldSet = true
+			}
+		} else if arrI, ok := field.Type.(*ast.ArrayType); ok {
+			// *ast.ArrayType field name --- Titles
+			if eleI, ok := arrI.Elt.(*ast.StarExpr); ok {
+				if detailI, ok := eleI.X.(*ast.Ident); ok {
+					sf.Type = detailI.Name
+					sf.IsArr = true
+					sf.IsArrSubPointer = true
+					fieldSet = true
+				} else {
+					fmt.Println("wrong identifier type", fieldName, reflect.TypeOf(eleI.X))
+				}
+			} else if eleI, ok := arrI.Elt.(*ast.Ident); ok {
+				sf.Type = eleI.Name
+				sf.IsArr = true
+				fieldSet = true
+			} else {
+				fmt.Println("wrong identifier type", fieldName, reflect.TypeOf(arrI.Elt))
+				continue
+			}
+
+		} else if starI, ok := field.Type.(*ast.StarExpr); ok {
+			detailI, ok := starI.X.(*ast.Ident)
+			if ok {
+				if !models.IsExcludeInDasAgDota2(structName, fieldName) {
+					sf.Type = detailI.Name
+					sf.IsPointer = true
+					fieldSet = true
+				}
+			} else {
+				fmt.Println("Unknown star type", fieldName, starI.X)
+			}
+		} else {
+			fmt.Println("Unknown type", fieldName, field.Type)
+		}
+
+		if !fieldSet {
+			continue
+		}
+
+		if field.Tag != nil {
+			jsonTag, ok := pp.parseJSONTag(field.Tag.Value)
+			if ok {
+				sf.Tag = jsonTag
+			}
+		}
+
+		obj.Fields = append(obj.Fields, sf)
+	}
+
+	bufs.Write(obj.Export())
 }
