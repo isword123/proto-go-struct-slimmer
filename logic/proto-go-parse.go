@@ -69,6 +69,8 @@ func (pp *ProtoGoParser) getFileBaseName() string {
 func (pp *ProtoGoParser) GetStructsBytes() []byte {
 	bufs := pp.buff
 
+	consts := make(map[string]*Const, 0)
+
 	for _, decl := range pp.file.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok {
@@ -79,7 +81,7 @@ func (pp *ProtoGoParser) GetStructsBytes() []byte {
 
 			// 处理 const 字段
 			if vSpec, ok := spec.(*ast.ValueSpec); ok && genDecl.Tok == token.CONST {
-				pp.getConstDefs(vSpec)
+				pp.getConstDefs(vSpec, consts)
 				continue
 			}
 
@@ -90,7 +92,7 @@ func (pp *ProtoGoParser) GetStructsBytes() []byte {
 
 			// for type definitions
 			if it, ok := tSpec.Type.(*ast.Ident); ok {
-				pp.getConstTypeDefs(tSpec ,it, bufs)
+				pp.getConstTypeDefs(tSpec ,it, bufs, consts)
 				continue
 			}
 
@@ -99,6 +101,13 @@ func (pp *ProtoGoParser) GetStructsBytes() []byte {
 				pp.getStruct(tSpec, structExp)
 			}
 		}
+	}
+
+	for _, c := range consts {
+		bufs.Write(c.Export())
+		bufs.WriteString("\n")
+		bufs.Write(c.BuildTransMethod())
+		bufs.WriteString("\n")
 	}
 
 	return bufs.Bytes()
@@ -126,11 +135,25 @@ func (pp *ProtoGoParser) saveNewCode(bs []byte, dir string) bool {
 	return true
 }
 
-func (pp *ProtoGoParser) getConstTypeDefs(ts *ast.TypeSpec,ident *ast.Ident, buff *bytes.Buffer) {
-	buff.WriteString(fmt.Sprintf("type %s %s \n\n", ts.Name, ident.Name))
+func (pp *ProtoGoParser) getConstTypeDefs(ts *ast.TypeSpec,ident *ast.Ident, buff *bytes.Buffer, consts map[string]*Const) {
+	srcType := ident.Name
+	name := ts.Name.Name
+	c, ok := consts[name]
+	if !ok {
+		c = &Const{
+			Name: name,
+			Type: srcType,
+		}
+		consts[name] = c
+	} else {
+		c.Type = srcType
+		c.Name = name
+	}
+
+	// buff.WriteString(fmt.Sprintf("type %s %s \n\n", ts.Name.Name, ident.Name))
 }
 
-func (pp *ProtoGoParser) getConstDefs(vs *ast.ValueSpec) {
+func (pp *ProtoGoParser) getConstDefs(vs *ast.ValueSpec, consts map[string]*Const) {
 	typ := ""
 
 	if vs.Type == nil && len(vs.Values) > 0 {
@@ -166,7 +189,16 @@ func (pp *ProtoGoParser) getConstDefs(vs *ast.ValueSpec) {
 		return
 	}
 
-	pp.buff.WriteString(fmt.Sprintf("const %s %s = %s\n\n", name.Name, typ, val.Value))
+	c, ok := consts[typ]
+	if !ok {
+		c = &Const{
+			Name: typ,
+		}
+		consts[typ] = c
+	}
+	c.AddVal(name.Name, val.Value)
+
+	// pp.buff.WriteString(fmt.Sprintf("const %s %s = %s\n\n", name.Name, typ, val.Value))
 }
 
 func (pp *ProtoGoParser) ParseAndSave(filePath string, dir string) bool {

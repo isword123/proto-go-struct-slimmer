@@ -123,3 +123,45 @@ func (f *Field)BuildAssignSt(prefix string) []byte {
 
 	return buff.Bytes()
 }
+
+type Const struct {
+	Name string
+	Type string
+	Values map[string]string
+}
+
+func (c *Const)AddVal(key, val string) {
+	if c.Values == nil {
+		c.Values = make(map[string]string)
+	}
+	c.Values[key] = val
+}
+
+func (c *Const)Export() []byte {
+	buff := new(bytes.Buffer)
+
+	buff.WriteString(fmt.Sprintf("type %s %s\n", c.Name, c.Type))
+
+	if len(c.Values) > 0 {
+		buff.WriteString("const (\n")
+		for key, val := range c.Values {
+			buff.WriteString(fmt.Sprintf("\t%s %s = %s\n", key, c.Name, val))
+		}
+		buff.WriteString(")\n")
+	}
+
+	return buff.Bytes()
+}
+
+func (c *Const)BuildTransMethod() []byte {
+	buff := new(bytes.Buffer)
+
+	funcName := "Trans" + c.Name
+	srcType := srcPkgName + "." + c.Name
+
+	buff.WriteString(fmt.Sprintf("func %s(src %s) %s {\n", funcName, srcType, c.Name))
+	buff.WriteString(fmt.Sprintf("\treturn %s(src)\n", c.Name))
+	buff.WriteString("}\n")
+
+	return buff.Bytes()
+}
