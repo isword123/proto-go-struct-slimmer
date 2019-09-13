@@ -3,6 +3,7 @@ package logic
 import (
 	"bytes"
 	"fmt"
+	"github.com/isword123/proto-go-struct-slimmer/models"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -92,42 +93,49 @@ func (pp *ProtoGoParser) GetStructsBytes() []byte {
 				continue
 			}
 
-			bufs.WriteString(fmt.Sprintf("type %s struct {\n", tSpec.Name))
+			structName := tSpec.Name.Name
+			bufs.WriteString(fmt.Sprintf("type %s struct {\n", structName))
 
 			for _, field := range structExp.Fields.List {
 				if len(field.Names) <= 0 {
 					continue
 				}
 
-				fmt.Println("filed type---", reflect.TypeOf(field.Type), "field name ---", field.Names[0].Name)
-
+				fieldSet := false
 				fieldName := field.Names[0].Name
 				if strings.HasPrefix(fieldName, "XXX_") {
 					continue
 				}
 
 				if ident, ok := field.Type.(*ast.Ident); ok {
-					fmt.Println("names", field.Names, "type", ident.Name, "tag", field.Tag)
-					bufs.WriteString(fmt.Sprintf("\t%s %s", field.Names[0].Name, ident.Name))
+					if !models.IsExcludeInDasAgDota2(structName, fieldName) {
+						bufs.WriteString(fmt.Sprintf("\t%s %s", fieldName, ident.Name))
+						fieldSet = true
+					}
 				} else if arrI, ok := field.Type.(*ast.ArrayType); ok {
 					// *ast.ArrayType field name --- Titles
 					if eleI, ok := arrI.Elt.(*ast.StarExpr); ok {
 						if detailI, ok := eleI.X.(*ast.Ident); ok {
-							bufs.WriteString(fmt.Sprintf("\t%s []*%s", field.Names[0].Name, detailI.Name))
+							bufs.WriteString(fmt.Sprintf("\t%s []*%s", fieldName, detailI.Name))
+							fieldSet = true
 						} else {
-							fmt.Println("wrong identifier type", field.Names[0].Name, reflect.TypeOf(eleI.X))
+							fmt.Println("wrong identifier type", fieldName, reflect.TypeOf(eleI.X))
 						}
 					} else if eleI, ok := arrI.Elt.(*ast.Ident); ok {
-						bufs.WriteString(fmt.Sprintf("\t%s []%s", field.Names[0].Name, eleI.Name))
+						bufs.WriteString(fmt.Sprintf("\t%s []%s", fieldName, eleI.Name))
+						fieldSet = true
 					} else {
-						fmt.Println("wrong identifier type", field.Names[0].Name, reflect.TypeOf(arrI.Elt))
+						fmt.Println("wrong identifier type", fieldName, reflect.TypeOf(arrI.Elt))
 						continue
 					}
 
 				} else if starI, ok := field.Type.(*ast.StarExpr); ok {
 					detailI, ok := starI.X.(*ast.Ident)
 					if ok {
-						bufs.WriteString(fmt.Sprintf("\t%s *%s", field.Names[0].Name, detailI.Name))
+						if !models.IsExcludeInDasAgDota2(structName, fieldName) {
+							bufs.WriteString(fmt.Sprintf("\t%s *%s", fieldName, detailI.Name))
+							fieldSet = true
+						}
 					} else {
 						fmt.Println("Unknown star type", fieldName, starI.X)
 					}
@@ -135,12 +143,15 @@ func (pp *ProtoGoParser) GetStructsBytes() []byte {
 					fmt.Println("Unknown type", fieldName, field.Type)
 				}
 
+				if !fieldSet {
+					continue
+				}
+
 				if field.Tag != nil {
 					jsonTag, ok := pp.parseJSONTag(field.Tag.Value)
 					if ok {
 						bufs.WriteString(fmt.Sprintf(" `%s`\n", jsonTag))
 					}
-					fmt.Println("tag is", field.Tag.Value)
 				} else {
 					bufs.WriteString("\n")
 				}
