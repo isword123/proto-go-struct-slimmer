@@ -122,7 +122,10 @@ func (pp *ProtoGoParser) parseJSONTag(srcTag string) (string, bool) {
 		return "", false
 	}
 
-	return srcTag[index:len(srcTag) - 1], true
+	subStr := srcTag[index:len(srcTag) - 1]
+	result := strings.ReplaceAll(subStr, ",omitempty", "")
+
+	return result, true
 }
 
 func (pp *ProtoGoParser) saveNewCode(bs []byte, dir string) bool {
