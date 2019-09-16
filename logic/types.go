@@ -6,9 +6,15 @@ import (
 	"strings"
 )
 
+type Package struct {
+	Name string
+	Path string
+}
+
 type Object struct {
 	Name string
 	Fields []Field
+	Package *Package
 }
 
 func (o *Object)Export() []byte {
@@ -29,7 +35,7 @@ func (o *Object)BuildTransMethod() []byte {
 	buff := new(bytes.Buffer)
 
 	funcName := fmt.Sprintf("Trans%s", o.Name)
-	srcType := fmt.Sprintf("*%s.%s", srcPkgName, o.Name)
+	srcType := fmt.Sprintf("*%s.%s", o.Package.Name, o.Name)
 
 	// 单个
 	buff.WriteString(fmt.Sprintf("func %s(src %s) *%s {\n", funcName, srcType, o.Name))
@@ -128,6 +134,7 @@ type Const struct {
 	Name string
 	Type string
 	Values map[string]string
+	Package *Package
 }
 
 func (c *Const)AddVal(key, val string) {
@@ -157,7 +164,7 @@ func (c *Const)BuildTransMethod() []byte {
 	buff := new(bytes.Buffer)
 
 	funcName := "Trans" + c.Name
-	srcType := srcPkgName + "." + c.Name
+	srcType := c.Package.Name + "." + c.Name
 
 	buff.WriteString(fmt.Sprintf("func %s(src %s) %s {\n", funcName, srcType, c.Name))
 	buff.WriteString(fmt.Sprintf("\treturn %s(src)\n", c.Name))

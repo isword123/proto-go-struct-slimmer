@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/isword123/proto-go-struct-slimmer/models"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"io/ioutil"
@@ -15,18 +16,13 @@ import (
 	"strings"
 )
 
-const (
-	srcPkgPath = "git.vpgame.cn/sh-team/das-ag-dota2-api-client/proto-gens"
-	srcPkgName = "das_dota2"
-)
-
 type ProtoGoParser struct {
 	file *ast.File
 	packageName string
 	fileBaseName string
-	modName string
 
 	buff *bytes.Buffer
+	Pkg *Package
 }
 
 func (pp *ProtoGoParser)Parse(filePath string) bool {
@@ -43,23 +39,29 @@ func (pp *ProtoGoParser)Parse(filePath string) bool {
 	pp.fileBaseName = strings.TrimSuffix(filepath.Base(filePath), ".pb.go")
 	fmt.Println("file base name", filePath, pp.fileBaseName)
 
-	pp.packageName = parsedFile.Name.Name + "_trans"
+	dir, _ := filepath.Rel(os.Getenv("GOPATH") + "/src", filepath.Dir(filePath))
+	fmt.Println("got pkg path", dir)
+
+	pkg := Package{
+		Name: parsedFile.Name.Name,
+		Path: dir,
+	}
+
+	pp.Pkg = &pkg
+
+	// pp.packageName = parsedFile.Name.Name + "_trans"
 
 	pp.buff = new(bytes.Buffer)
 
-	pp.buff.WriteString(fmt.Sprintf("package %s\n\n", pp.getPackageName()))
-	pp.buff.WriteString(fmt.Sprintf("import \"%s\"", srcPkgPath))
+	pp.buff.WriteString(fmt.Sprintf("package %s\n\n", pp.getOutputPkgName()))
+	pp.buff.WriteString(fmt.Sprintf("import \"%s\"", pkg.Path))
 	pp.buff.WriteString("\n\n")
 
 	return true
 }
 
-func (pp *ProtoGoParser)getPackageName() string {
-	if len(pp.packageName) == 0 {
-		return "hello"
-	}
-
-	return pp.packageName
+func (pp *ProtoGoParser) getOutputPkgName() string {
+	return pp.Pkg.Name + "_trans"
 }
 
 func (pp *ProtoGoParser) getFileBaseName() string {
@@ -142,6 +144,7 @@ func (pp *ProtoGoParser) getConstTypeDefs(ts *ast.TypeSpec,ident *ast.Ident, buf
 	if !ok {
 		c = &Const{
 			Name: name,
+			Package: pp.Pkg,
 			Type: srcType,
 		}
 		consts[name] = c
@@ -149,8 +152,6 @@ func (pp *ProtoGoParser) getConstTypeDefs(ts *ast.TypeSpec,ident *ast.Ident, buf
 		c.Type = srcType
 		c.Name = name
 	}
-
-	// buff.WriteString(fmt.Sprintf("type %s %s \n\n", ts.Name.Name, ident.Name))
 }
 
 func (pp *ProtoGoParser) getConstDefs(vs *ast.ValueSpec, consts map[string]*Const) {
@@ -193,12 +194,11 @@ func (pp *ProtoGoParser) getConstDefs(vs *ast.ValueSpec, consts map[string]*Cons
 	if !ok {
 		c = &Const{
 			Name: typ,
+			Package: pp.Pkg,
 		}
 		consts[typ] = c
 	}
 	c.AddVal(name.Name, val.Value)
-
-	// pp.buff.WriteString(fmt.Sprintf("const %s %s = %s\n\n", name.Name, typ, val.Value))
 }
 
 func (pp *ProtoGoParser) ParseAndSave(filePath string, dir string) bool {
@@ -207,7 +207,12 @@ func (pp *ProtoGoParser) ParseAndSave(filePath string, dir string) bool {
 	}
 
 	bs := pp.GetStructsBytes()
-	return pp.saveNewCode(bs, dir)
+	result, err := format.Source(bs)
+	if err != nil {
+		fmt.Println("Wrong formatting", filePath, err)
+		return false
+	}
+	return pp.saveNewCode(result, dir)
 }
 
 func (pp *ProtoGoParser) getStruct(tSpec *ast.TypeSpec, structExp *ast.StructType) {
@@ -221,6 +226,7 @@ func (pp *ProtoGoParser) getStruct(tSpec *ast.TypeSpec, structExp *ast.StructTyp
 	var obj Object
 	structName := tSpec.Name.Name
 	obj.Name = structName
+	obj.Package = pp.Pkg
 
 	for _, field := range structExp.Fields.List {
 		if len(field.Names) <= 0 {
