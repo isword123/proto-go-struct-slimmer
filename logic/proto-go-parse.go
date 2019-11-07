@@ -245,7 +245,7 @@ func (pp *ProtoGoParser) getStruct(tSpec *ast.TypeSpec, structExp *ast.StructTyp
 		var sf Field
 		sf.Name = fieldName
 		if ident, ok := field.Type.(*ast.Ident); ok {
-			if !models.IsExcludeInDasAgDota2(structName, fieldName) {
+			if !models.IsExcluded(pp.Pkg.Name, structName, fieldName) {
 				sf.Type = ident.Name
 				fieldSet = true
 			}
@@ -272,7 +272,7 @@ func (pp *ProtoGoParser) getStruct(tSpec *ast.TypeSpec, structExp *ast.StructTyp
 		} else if starI, ok := field.Type.(*ast.StarExpr); ok {
 			detailI, ok := starI.X.(*ast.Ident)
 			if ok {
-				if !models.IsExcludeInDasAgDota2(structName, fieldName) {
+				if !models.IsExcluded(pp.Pkg.Name, structName, fieldName) {
 					sf.Type = detailI.Name
 					sf.IsPointer = true
 					fieldSet = true
