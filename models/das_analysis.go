@@ -28,6 +28,11 @@ var (
 		"FeCSGOTeam": {
 			"Logo",
 		},
+		"TeamVsTeamStats_VsStats": {
+			"Matches",
+			"FirstBlood",
+			"TenKills",
+		},
 	}
 )
 

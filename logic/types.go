@@ -74,6 +74,9 @@ type Field struct {
 	IsPointer bool
 	IsArr bool
 	IsArrSubPointer bool
+	IsMap bool
+	MapKey string
+	MapValue string
 	Tag string
 }
 
@@ -91,6 +94,8 @@ func (f *Field)Export() []byte {
 		}
 
 		buff.WriteString(fmt.Sprintf("%s []%s", f.Name, eleT))
+	} else if f.IsMap {
+		buff.WriteString(fmt.Sprintf("%s map[%s]%s", f.Name, f.MapKey, f.MapValue))
 	} else if f.IsPointer {
 		buff.WriteString(fmt.Sprintf("%s *%s", f.Name, f.Type))
 	} else {

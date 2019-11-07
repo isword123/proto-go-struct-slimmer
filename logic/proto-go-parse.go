@@ -124,6 +124,7 @@ func (pp *ProtoGoParser) parseJSONTag(srcTag string) (string, bool) {
 
 	subStr := srcTag[index:len(srcTag) - 1]
 	result := strings.ReplaceAll(subStr, ",omitempty", "")
+	result = strings.Split(result, " ")[0]
 
 	return result, true
 }
@@ -280,6 +281,18 @@ func (pp *ProtoGoParser) getStruct(tSpec *ast.TypeSpec, structExp *ast.StructTyp
 			} else {
 				fmt.Println("Unknown star type", fieldName, starI.X)
 			}
+		} else if mapT, ok := field.Type.(*ast.MapType); ok {
+			keyI, ok := mapT.Key.(*ast.Ident)
+			if ok {
+				sf.MapKey = keyI.Name
+			}
+			valI, ok := mapT.Value.(*ast.Ident)
+			if ok {
+				sf.MapValue = valI.Name
+			}
+			sf.Type = "map"
+			sf.IsMap = true
+			fieldSet = true
 		} else {
 			fmt.Println("Unknown type", fieldName, field.Type)
 		}
